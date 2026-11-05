@@ -212,9 +212,9 @@ const map=L.map('map',{zoomControl:true,attributionControl:true,scrollWheelZoom:
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
   attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
 const css=getComputedStyle(document.documentElement);
-L.polyline(ROUTE,{color:css.getPropertyValue('--route').trim()||'#9aa6bb',weight:6,opacity:.9}).addTo(map);
-const svLeg=L.polyline([P.corner,P.home],{color:'#d2232a',weight:4,dashArray:'4 7'}).addTo(map).bindTooltip('Street View');
-const walked=L.polyline([],{color:css.getPropertyValue('--walked').trim()||'#1c3b77',weight:6}).addTo(map);
+L.polyline(ROUTE,{color:'#1c3b77',weight:6,opacity:.55}).addTo(map);
+const svLeg=L.polyline([P.corner,P.home],{color:'#1c3b77',weight:4,dashArray:'4 7'}).addTo(map).bindTooltip('Street View');
+const walked=L.polyline([],{color:'#d2232a',weight:8,opacity:.95}).addTo(map);
 LANDMARKS.forEach(([p,n])=>L.circleMarker(p,{radius:5,color:'#1c3b77',weight:2,fillColor:'#fff',fillOpacity:1}).addTo(map).bindTooltip(n,{direction:'right'}));
 const you=L.marker(P.select,{icon:L.divIcon({className:'',html:'<div class="you"></div>',iconSize:[18,18],iconAnchor:[9,9]}),zIndexOffset:1000}).addTo(map);
 map.fitBounds(L.latLngBounds(ROUTE).pad(.12));
