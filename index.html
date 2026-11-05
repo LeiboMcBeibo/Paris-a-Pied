@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paris à Pied — Rue Dareau ⇄ Le Select</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Jost:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: plaque header, then video (wide) beside a live route map, then the list of stops. */
+:root{
+  --bg:#eef0ee;          /* Paris limestone, cool */
+  --panel:#ffffff;
+  --fg:#1b2130;
+  --muted:#5d6577;
+  --line:#d5d9de;
+  --plaque:#1c3b77;      /* enamel street-sign blue */
+  --plaque-edge:#2d6a4b; /* sign's green frame */
+  --plaque-ink:#ffffff;
+  --dot:#d2232a;         /* "you are here" red */
+  --route:#9aa6bb;
+  --walked:#1c3b77;
+  --font-sign:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"Jost",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#11141b;--panel:#1a1f29;--fg:#e8eaf0;--muted:#9aa2b3;--line:#2c3340;--plaque:#2b4f96;--plaque-edge:#3f8a62;--route:#4d5870;--walked:#7fa2ea;color-scheme:dark}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--font-body);
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 32px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+
+/* Street-plaque header */
+.plaque{background:var(--plaque);color:var(--plaque-ink);border:4px solid var(--plaque-edge);
+  outline:3px solid var(--plaque);border-radius:10px;padding:10px 22px 12px;display:flex;flex-wrap:wrap;
+  align-items:center;justify-content:space-between;gap:12px}
+.plaque .arr{font:600 15px/1 var(--font-sign);letter-spacing:.06em;opacity:.9}
+.plaque h1{font:700 clamp(28px,4.4vw,46px)/1.05 var(--font-sign);margin:4px 0 0;letter-spacing:.01em;text-wrap:balance}
+.dir{display:flex;gap:0;border:2px solid #ffffffaa;border-radius:999px;overflow:hidden}
+.dir button{font:600 15px var(--font-body);background:transparent;color:#fff;border:0;padding:9px 16px;cursor:pointer}
+.dir button[aria-pressed="true"]{background:#fff;color:var(--plaque)}
+.dir button:focus-visible{outline:3px solid #ffd54a;outline-offset:-3px}
+
+.stage{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px}
+@media (max-width:860px){.stage{grid-template-columns:1fr}}
+.screen{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;width:100%}
+.screen > div,.screen iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.cover{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:linear-gradient(180deg,#0f1a33ee,#0b1020f2);color:#fff;text-align:center;padding:20px;z-index:3}
+.cover p{margin:0;max-width:44ch;color:#d9def0}
+.big{font:600 18px var(--font-body);background:#fff;color:var(--plaque);border:0;border-radius:999px;padding:12px 28px;cursor:pointer}
+.big:focus-visible{outline:3px solid #ffd54a}
+.sv-tools{position:absolute;left:12px;bottom:12px;z-index:4;display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:500 14px var(--font-body);background:#ffffffee;color:#1b2130;border:0;border-radius:999px;padding:7px 14px;cursor:pointer}
+.chip.primary{background:var(--dot);color:#fff}
+
+#map{border-radius:8px;min-height:280px;height:100%;border:1px solid var(--line);background:var(--panel)}
+@media (max-width:860px){#map{height:320px}}
+
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.bar button{font:500 15px var(--font-body);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed="true"]{background:var(--plaque);color:#fff;border-color:var(--plaque)}
+.bar button:focus-visible{outline:3px solid var(--dot);outline-offset:1px}
+.bar .grow{flex:1 1 200px;min-width:0}
+.track{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.track span{display:block;height:100%;width:0;background:var(--walked);transition:width .4s linear}
+.time{font:500 14px var(--font-body);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.speed{display:flex;gap:4px;align-items:center}
+.speed label{font-size:14px;color:var(--muted);margin-right:2px}
+
+.now{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline}
+.now strong{font:700 24px var(--font-sign);letter-spacing:.02em}
+.now span{color:var(--muted)}
+
+.stops{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.stop{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.stop[aria-current="true"]{border-color:var(--plaque);box-shadow:0 0 0 2px var(--plaque) inset}
+.mini{align-self:flex-start;background:var(--plaque);color:#fff;border:2px solid var(--plaque-edge);border-radius:5px;padding:2px 10px 3px;font:600 17px/1.15 var(--font-sign)}
+.mini small{display:block;font:500 11px var(--font-sign);letter-spacing:.06em;opacity:.85}
+.stop p{margin:0;font-size:14.5px;color:var(--muted)}
+.stop .meta{font-size:13px}
+.stop a{color:var(--walked)}
+footer{font-size:13px;color:var(--muted);max-width:80ch}
+footer a{color:var(--walked)}
+.leaflet-container{font-family:var(--font-body)}
+.you{width:18px;height:18px;border-radius:50%;background:var(--dot);border:3px solid #fff;box-shadow:0 0 0 2px var(--dot),0 2px 6px #0006}
+@media (prefers-reduced-motion:reduce){.track span{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="plaque">
+    <div>
+      <div class="arr">PARIS À PIED · 14<sup>e</sup> & 6<sup>e</sup> ARR<sup>t</sup></div>
+      <h1 id="title">Le Select → 4 Rue Dareau</h1>
+    </div>
+    <div class="dir" role="group" aria-label="Direction">
+      <button id="dirHome" aria-pressed="true">Walk home</button>
+      <button id="dirOut" aria-pressed="false">Walk to Le Select</button>
+    </div>
+  </header>
+
+  <section class="stage">
+    <div class="screen" id="screen">
+      <div id="yt"></div>
+      <iframe id="sv" hidden title="Street View, Rue Dareau" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <div class="sv-tools" id="svTools" hidden>
+        <button class="chip" id="svDoor">Face the door</button>
+        <button class="chip" id="svBlvd">Face the boulevard</button>
+        <button class="chip primary" id="svNext">Continue walking →</button>
+      </div>
+      <div class="cover" id="cover">
+        <p id="coverText">About 19 minutes of real footage at walking pace, filmed by three people on three different days. Drag the speed up if you want to stroll faster.</p>
+        <button class="big" id="startBtn">Start the walk</button>
+      </div>
+    </div>
+    <div id="map" role="img" aria-label="Route map with your position"></div>
+  </section>
+
+  <div class="bar">
+    <button id="playBtn" aria-label="Pause">Pause</button>
+    <button id="prevBtn">◀ Previous</button>
+    <button id="nextBtn">Next ▶</button>
+    <div class="grow"><div class="track"><span id="prog"></span></div></div>
+    <span class="time" id="time">0:00 / 0:00</span>
+    <div class="speed" role="group" aria-label="Speed">
+      <label>Speed</label>
+      <button data-rate="1" aria-pressed="true">1×</button>
+      <button data-rate="1.5" aria-pressed="false">1.5×</button>
+      <button data-rate="2" aria-pressed="false">2×</button>
+    </div>
+  </div>
+
+  <div class="now" aria-live="polite"><strong id="nowName">—</strong><span id="nowNote"></span></div>
+
+  <ol class="stops" id="stops"></ol>
+
+  <footer>
+    Footage belongs to the filmmakers credited on each stop and plays through YouTube's own player, so YouTube may show an ad between stops. Street View imagery © Google. Map © OpenStreetMap contributors, © CARTO. Positions on the map are approximate.
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ---------- Route & places (from OpenStreetMap walking route, home → Le Select) ----------
+const ROUTE=[[48.8319,2.33902],[48.83205,2.33929],[48.83365,2.33359],[48.83375,2.33342],[48.83388,2.33349],[48.83406,2.33352],[48.83436,2.33312],[48.83459,2.33309],[48.83478,2.33252],[48.83732,2.33159],[48.83958,2.33059],[48.83957,2.3304],[48.84166,2.32961],[48.84202,2.32908],[48.84237,2.3293],[48.84262,2.32839]];
+const P={
+  home:[48.83192,2.33900], corner:[48.83205,2.33929], station:[48.83298,2.33682],
+  denfertE:[48.83365,2.33359], denfertN:[48.83478,2.33252], cartier:[48.83737,2.33191],
+  vavin:[48.84202,2.32908], select:[48.84262,2.32839]
+};
+const LANDMARKS=[
+  [P.home,"4 Rue Dareau"],[P.station,"Saint-Jacques métro"],[[48.83433,2.33247],"Place Denfert-Rochereau"],
+  [P.cartier,"Fondation Cartier"],[P.vavin,"Carrefour Vavin"],[P.select,"Le Select"]
+];
+
+// ---------- Stops, in "walk home" order ----------
+const SV_PANO="ZbN2V4esyORgQF4wk_ohdw", SV_LAT=48.8318552, SV_LNG=2.3390811;
+const STOPS=[
+  {kind:"yt", id:"2EFjOyenpgI", start:745, end:935, arr:"6e arrt", street:"Boulevard du Montparnasse",
+   label:"Le Select to Carrefour Vavin", filmed:"Late summer", by:"Pierre TV",
+   anchors:[[745,P.select],[935,P.vavin]],
+   home:"Past Le Select's terrace and along the boulevard to the Vavin crossroads.",
+   out:"Arriving at Le Select. This walker approaches along Boulevard du Montparnasse."},
+  {kind:"yt", id:"3r_gw7D0Q3A", start:2795, end:3560, arr:"14e arrt", street:"Boulevard Raspail",
+   label:"Vavin down Raspail to Denfert", filmed:"19 June 2024, 5 pm", by:"A walk around France",
+   anchors:[[2795,P.vavin],[3250,P.cartier],[3560,P.denfertN]],
+   home:"South on Raspail under the plane trees, past the glass Fondation Cartier, into Place Denfert-Rochereau.",
+   out:"Raspail between Denfert and Vavin. The camera faces back toward Denfert, the way you came."},
+  {kind:"yt", id:"RERjkxR53R4", start:30, end:555, arr:"14e arrt", street:"Boulevard Saint-Jacques",
+   label:"Denfert to Rue Dareau", filmed:"24 August 2020", by:"ART VISION TV / C&B Journal",
+   anchors:[[30,P.denfertE],[385,P.station],[555,P.corner]],
+   home:"From the Lion of Belfort east along the boulevard, past the Saint-Jacques métro, beside the wall of Line 6.",
+   out:"Boulevard Saint-Jacques toward Denfert. The camera faces back toward Rue Dareau."},
+  {kind:"sv", arr:"14e arrt", street:"Rue Dareau", label:"The last 60 metres",
+   filmed:"Street View, April 2024", by:"Google Street View", anchors:[[0,P.corner],[1,P.home]],
+   home:"Turn into Rue Dareau. Number 4 is the doorway with the two gold discs.",
+   out:"Start at the door of number 4, then head for Boulevard Saint-Jacques."}
+];
+const ytDur=s=>s.end-s.start;
+
+// ---------- Geometry helpers ----------
+const toXY=([la,lo])=>[lo*Math.cos(48.837*Math.PI/180)*111320, la*110540];
+const CUM=[0]; for(let i=1;i<ROUTE.length;i++){const a=toXY(ROUTE[i-1]),b=toXY(ROUTE[i]);CUM.push(CUM[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1]));}
+function project(pt){ // distance along route of nearest point
+  const p=toXY(pt); let best=1e18, bd=0;
+  for(let i=1;i<ROUTE.length;i++){const a=toXY(ROUTE[i-1]),b=toXY(ROUTE[i]);const dx=b[0]-a[0],dy=b[1]-a[1];const L=dx*dx+dy*dy;
+    let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0; t=Math.max(0,Math.min(1,t));
+    const d=Math.hypot(a[0]+t*dx-p[0],a[1]+t*dy-p[1]); if(d<best){best=d;bd=CUM[i-1]+t*Math.sqrt(L);} }
+  return bd;
+}
+function pointAt(d){
+  d=Math.max(0,Math.min(CUM[CUM.length-1],d));
+  for(let i=1;i<CUM.length;i++) if(d<=CUM[i]){const t=(d-CUM[i-1])/((CUM[i]-CUM[i-1])||1);
+    return [ROUTE[i-1][0]+t*(ROUTE[i][0]-ROUTE[i-1][0]), ROUTE[i-1][1]+t*(ROUTE[i][1]-ROUTE[i-1][1])];}
+  return ROUTE[ROUTE.length-1];
+}
+STOPS.forEach(s=>s.anch=s.anchors.map(([t,p])=>[t,project(p)]));
+function distFor(s,t){const a=s.anch; if(t<=a[0][0])return a[0][1];
+  for(let i=1;i<a.length;i++) if(t<=a[i][0]){const f=(t-a[i-1][0])/(a[i][0]-a[i-1][0]);return a[i-1][1]+f*(a[i][1]-a[i-1][1]);}
+  return a[a.length-1][1];}
+
+// ---------- Map ----------
+const map=L.map('map',{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>'}).addTo(map);
+const css=getComputedStyle(document.documentElement);
+L.polyline(ROUTE,{color:css.getPropertyValue('--route').trim()||'#9aa6bb',weight:6,opacity:.9}).addTo(map);
+const svLeg=L.polyline([P.corner,P.home],{color:'#d2232a',weight:4,dashArray:'4 7'}).addTo(map).bindTooltip('Street View');
+const walked=L.polyline([],{color:css.getPropertyValue('--walked').trim()||'#1c3b77',weight:6}).addTo(map);
+LANDMARKS.forEach(([p,n])=>L.circleMarker(p,{radius:5,color:'#1c3b77',weight:2,fillColor:'#fff',fillOpacity:1}).addTo(map).bindTooltip(n,{direction:'right'}));
+const you=L.marker(P.select,{icon:L.divIcon({className:'',html:'<div class="you"></div>',iconSize:[18,18],iconAnchor:[9,9]}),zIndexOffset:1000}).addTo(map);
+map.fitBounds(L.latLngBounds(ROUTE).pad(.12));
+setTimeout(()=>map.invalidateSize(),300); addEventListener('resize',()=>map.invalidateSize());
+
+let homeward=true;
+function moveYou(d){
+  you.setLatLng(pointAt(d));
+  // walked part: from walk start to d
+  const startD = homeward ? CUM[CUM.length-1] : 0, lo=Math.min(startD,d), hi=Math.max(startD,d);
+  const pts=[pointAt(lo)]; for(let i=0;i<ROUTE.length;i++) if(CUM[i]>lo&&CUM[i]<hi) pts.push(ROUTE[i]); pts.push(pointAt(hi));
+  walked.setLatLngs(pts);
+}
+
+// ---------- Player ----------
+const $=id=>document.getElementById(id);
+let order=STOPS.slice(), idx=0, rate=1, player=null, ytReady=false, started=false, playing=false;
+
+function svUrl(h){return `https://www.google.com/maps/embed?pb=!4v1730800000000!6m8!1m7!1s${SV_PANO}!2m2!1d${SV_LAT}!2d${SV_LNG}!3f${h}!4f0!5f0.7820865974627469`;}
+
+function renderStops(){
+  const ol=$('stops'); ol.replaceChildren();
+  order.forEach((s,i)=>{
+    const li=document.createElement('li'); li.className='stop'; li.tabIndex=0; li.setAttribute('aria-current', i===idx?'true':'false');
+    const len = s.kind==='yt' ? fmt(ytDur(s)) : 'look around';
+    li.innerHTML=`<div class="mini"><small>${s.arr.replace('e ','<sup>e</sup> ')}</small>${s.street}</div>
+      <div><strong>${i+1}. ${s.label}</strong> <span class="meta">· ${len}</span></div>
+      <p>${homeward?s.home:s.out}</p>
+      <p class="meta">${s.filmed} · ${s.kind==='yt'?`<a href="https://www.youtube.com/watch?v=${s.id}&t=${s.start}s" target="_blank" rel="noopener">${s.by}</a>`:s.by}</p>`;
+    li.addEventListener('click',e=>{ if(e.target.tagName==='A')return; go(i); });
+    li.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();go(i);} });
+    ol.append(li);
+  });
+}
+function fmt(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+const TOTAL=STOPS.filter(s=>s.kind==='yt').reduce((a,s)=>a+ytDur(s),0);
+function elapsedBefore(i){return order.slice(0,i).filter(s=>s.kind==='yt').reduce((a,s)=>a+ytDur(s),0);}
+function updateBar(t){
+  const s=order[idx]; let e=elapsedBefore(idx); if(s.kind==='yt') e+=Math.max(0,Math.min(ytDur(s),t-s.start));
+  $('prog').style.width=(100*e/TOTAL)+'%';
+  $('time').textContent=`${fmt(e)} / ${fmt(TOTAL)}`+(rate>1?`  (${fmt((TOTAL-e)/rate)} left at ${rate}×)`:'');
+}
+function setNow(){
+  const s=order[idx]; $('nowName').textContent=`${s.street}`; $('nowNote').textContent=homeward?s.home:s.out;
+  document.querySelectorAll('.stop').forEach((li,i)=>li.setAttribute('aria-current',i===idx?'true':'false'));
+}
+
+function go(i){
+  if(i<0||i>=order.length) return;
+  idx=i; started=true; $('cover').hidden=true; setNow();
+  const s=order[i];
+  if(s.kind==='sv'){
+    if(player&&ytReady) player.pauseVideo();
+    $('yt').style.visibility='hidden'; $('sv').hidden=false; $('svTools').hidden=false;
+    const atStart=!homeward; // walking out: start at the door
+    $('sv').src=svUrl(atStart?265:60);
+    $('svNext').textContent = i===order.length-1 ? 'Walk again ↺' : 'Continue walking →';
+    moveYou(project(atStart?P.home:P.corner)); updateBar(0); playing=false; $('playBtn').textContent='Play';
+  } else {
+    $('sv').hidden=true; $('svTools').hidden=true; $('yt').style.visibility='visible';
+    if(!ytReady) return;
+    player.loadVideoById({videoId:s.id,startSeconds:s.start,endSeconds:s.end});
+    moveYou(distFor(s,s.start)); updateBar(s.start);
+  }
+}
+function next(){ if(idx<order.length-1) go(idx+1); else finish(); }
+function finish(){
+  if(player&&ytReady) player.pauseVideo(); playing=false; $('playBtn').textContent='Play';
+  $('coverText').textContent= homeward ? 'Home at 4 Rue Dareau. Bonne soirée.' : 'You have arrived at Le Select. Un café ?';
+  $('startBtn').textContent='Walk again'; $('cover').hidden=false; started=false;
+}
+function setDirection(h){
+  homeward=h; $('dirHome').setAttribute('aria-pressed',h); $('dirOut').setAttribute('aria-pressed',!h);
+  order = h ? STOPS.slice() : STOPS.slice().reverse();
+  $('title').textContent = h ? 'Le Select → 4 Rue Dareau' : '4 Rue Dareau → Le Select';
+  idx=0; renderStops(); setNow();
+  if(player&&ytReady) player.pauseVideo();
+  $('sv').hidden=true; $('svTools').hidden=true; $('yt').style.visibility='visible';
+  $('coverText').textContent = h
+    ? 'About 25 minutes of real footage at walking pace, filmed by three people on three different days, ending with Street View at your door.'
+    : 'This direction starts at your door. The film clips were shot walking the other way, so the camera looks back along the route.';
+  $('startBtn').textContent='Start the walk'; $('cover').hidden=false; started=false;
+  walked.setLatLngs([]); moveYou(project(h?P.select:P.home)); updateBar(order[0].kind==='yt'?order[0].start:0);
+}
+
+$('dirHome').onclick=()=>setDirection(true);
+$('dirOut').onclick=()=>setDirection(false);
+$('startBtn').onclick=()=>go(0);
+$('prevBtn').onclick=()=>go(Math.max(0,idx-1));
+$('nextBtn').onclick=next;
+$('svNext').onclick=()=>{ if(idx===order.length-1){ setDirection(homeward); go(0);} else next(); };
+$('svDoor').onclick=()=>{$('sv').src=svUrl(265)};
+$('svBlvd').onclick=()=>{$('sv').src=svUrl(60)};
+$('playBtn').onclick=()=>{
+  if(!started){go(idx);return;}
+  if(order[idx].kind!=='yt'||!ytReady) return;
+  if(playing) player.pauseVideo(); else player.playVideo();
+};
+document.querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>{
+  rate=+b.dataset.rate; document.querySelectorAll('[data-rate]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  if(player&&ytReady) player.setPlaybackRate(rate);
+});
+
+// YouTube IFrame API
+window.onYouTubeIframeAPIReady=function(){
+  player=new YT.Player('yt',{width:'100%',height:'100%',
+    playerVars:{rel:0,playsinline:1,modestbranding:1,iv_load_policy:3,cc_load_policy:0},
+    events:{
+      onReady:()=>{ytReady=true; if(started&&order[idx].kind==='yt') go(idx);},
+      onStateChange:e=>{
+        if(e.data===YT.PlayerState.PLAYING){playing=true;$('playBtn').textContent='Pause'; if(player.getPlaybackRate()!==rate) player.setPlaybackRate(rate);}
+        if(e.data===YT.PlayerState.PAUSED){playing=false;$('playBtn').textContent='Play';}
+        if(e.data===YT.PlayerState.ENDED){ const s=order[idx]; if(s.kind==='yt' && player.getCurrentTime()>=s.end-2) next(); }
+      }
+    }});
+};
+setInterval(()=>{
+  if(!ytReady||!started) return; const s=order[idx]; if(s.kind!=='yt') return;
+  if(player.getVideoData && player.getVideoData().video_id!==s.id) return;
+  const t=player.getCurrentTime(); if(!t) return;
+  if(t>=s.start-1){ moveYou(distFor(s,t)); updateBar(t); }
+  if(t>=s.end-0.25 && playing) next();
+},500);
+
+setDirection(true);
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
