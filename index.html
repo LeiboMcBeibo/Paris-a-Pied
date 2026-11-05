@@ -30,6 +30,7 @@
   :root{--bg:#11141b;--panel:#1a1f29;--fg:#e8eaf0;--muted:#9aa2b3;--line:#2c3340;--plaque:#2b4f96;--plaque-edge:#3f8a62;--route:#4d5870;--walked:#7fa2ea;color-scheme:dark}
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--font-body);
   padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 32px max(16px,env(safe-area-inset-left))}
@@ -49,7 +50,7 @@ body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--font-body);
 .stage{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px}
 @media (max-width:860px){.stage{grid-template-columns:1fr}}
 .screen{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;width:100%}
-.screen > div,.screen iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.screen #yt,.screen iframe,.screen .cover{position:absolute;inset:0;width:100%;height:100%;border:0}
 .cover{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
   background:linear-gradient(180deg,#0f1a33ee,#0b1020f2);color:#fff;text-align:center;padding:20px;z-index:3}
 .cover p{margin:0;max-width:44ch;color:#d9def0}
@@ -116,7 +117,7 @@ footer a{color:var(--walked)}
         <button class="chip primary" id="svNext">Continue walking →</button>
       </div>
       <div class="cover" id="cover">
-        <p id="coverText">About 19 minutes of real footage at walking pace, filmed by three people on three different days. Drag the speed up if you want to stroll faster.</p>
+        <p id="coverText">About 25 minutes of real footage at walking pace, filmed by three people on three different days. Drag the speed up if you want to stroll faster.</p>
         <button class="big" id="startBtn">Start the walk</button>
       </div>
     </div>
@@ -142,7 +143,7 @@ footer a{color:var(--walked)}
   <ol class="stops" id="stops"></ol>
 
   <footer>
-    Footage belongs to the filmmakers credited on each stop and plays through YouTube's own player, so YouTube may show an ad between stops. Street View imagery © Google. Map © OpenStreetMap contributors, © CARTO. Positions on the map are approximate.
+    Footage belongs to the filmmakers credited on each stop and plays through YouTube's own player, so YouTube may show an ad between stops. Street View imagery © Google. Map © OpenStreetMap contributors. Positions on the map are approximate.
   </footer>
 </div>
 
@@ -208,8 +209,8 @@ function distFor(s,t){const a=s.anch; if(t<=a[0][0])return a[0][1];
 
 // ---------- Map ----------
 const map=L.map('map',{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',
-  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
 const css=getComputedStyle(document.documentElement);
 L.polyline(ROUTE,{color:css.getPropertyValue('--route').trim()||'#9aa6bb',weight:6,opacity:.9}).addTo(map);
 const svLeg=L.polyline([P.corner,P.home],{color:'#d2232a',weight:4,dashArray:'4 7'}).addTo(map).bindTooltip('Street View');
